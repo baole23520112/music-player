@@ -1,6 +1,7 @@
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 
+const PLAYER_STORAGE_KEY = "MUSIC_PLAYER_CONFIG";
 const cd = $(".cd");
 const heading = $("header h2");
 const cdThumb = $(".cd-thumb");
@@ -11,11 +12,21 @@ const progress = $(".progress");
 const nextBtn = $(".btn-next");
 const previousBtn = $(".btn-prev");
 const randomBtn = $(".btn-random");
+const repeatBtn = $(".btn-repeat");
+const playlist = $(".playlist");
 
 const app = {
 	currentIndex: 0,
 	isPlay: false,
 	isRandom: false,
+	isRepeat: false,
+	// Parse to render UI
+	config: JSON.parse(localStorage.getItem(PLAYER_STORAGE_KEY)) || {},
+	// Set and stringify to store in localStorage
+	setConfig: function (key, value) {
+		this.config[key] = value;
+		localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(this.config));
+	},
 	songs: [
 		{
 			name: "Dung lam trai tim anh dau",
@@ -45,7 +56,7 @@ const app = {
 			name: "Sau con mua",
 			singer: "CoolKid",
 			path: "./assets/music/song-05.mp3",
-			image: "/assets/img/img-05.png",
+			image: "./assets/img/img-05.png",
 		},
 		{
 			name: "Dung lam trai tim anh dau",
@@ -75,15 +86,17 @@ const app = {
 			name: "Sau con mua",
 			singer: "CoolKid",
 			path: "./assets/music/song-05.mp3",
-			image: "/assets/img/img-05.png",
+			image: "./assets/img/img-05.png",
 		},
 	],
 
 	// Render data to UI
 	render: function () {
-		htmls = this.songs.map((song) => {
+		htmls = this.songs.map((song, index) => {
 			return `
-                <div class="song">
+                <div class="song ${
+					this.currentIndex === index ? "active" : ""
+				}" data-id="${index}">
 					<div
 						class="thumb"
 						style="background-image: url('${song.image}')"
@@ -98,10 +111,10 @@ const app = {
 				</div>
             `;
 		});
-		$(".playlist").innerHTML = htmls.join("");
+		playlist.innerHTML = htmls.join("");
 	},
 
-	// Define currentSong for app
+	// Define properties for app
 	defineProperties: function () {
 		Object.defineProperty(this, "currentSong", {
 			get: function () {
@@ -110,6 +123,7 @@ const app = {
 		});
 	},
 
+	// Handle all events
 	handleEvents: function () {
 		const _this = this;
 		const cdWidth = cd.offsetWidth;
@@ -183,6 +197,7 @@ const app = {
 				_this.nextSong();
 			}
 			audio.play();
+			_this.scrollIntoActiveSong();
 		};
 
 		// Handle previous song button
@@ -193,18 +208,65 @@ const app = {
 				_this.previousSong();
 			}
 			audio.play();
+			_this.scrollIntoActiveSong();
 		};
 
 		// Handle random song button
 		randomBtn.onclick = (e) => {
 			_this.isRandom = !_this.isRandom;
+			_this.setConfig("isRandom", _this.isRandom);
 			e.target.closest(".btn").classList.toggle("active");
 		};
 
 		// Handle when ended
 		audio.onended = () => {
-			nextBtn.onclick();
-		}
+			if (_this.isRepeat) {
+				audio.play();
+			} else {
+				nextBtn.click();
+			}
+		};
+
+		// Handle repeat button
+		repeatBtn.onclick = (e) => {
+			_this.isRepeat = !_this.isRepeat;
+			_this.setConfig("isRepeat", _this.isRepeat);
+			e.target.closest(".btn").classList.toggle("active");
+		};
+
+		// Listening playlist
+		playlist.onclick = (e) => {
+			if (e.target.closest(".option")) return;
+			const song = e.target.closest(".song:not(.active)");
+			if (song) {
+				const index = song.dataset.id;
+				_this.currentIndex = index;
+				_this.loadCurrentSong();
+				audio.play();
+				_this.scrollIntoActiveSong();
+			}
+		};
+	},
+
+	// Handle scroll into view
+	scrollIntoActiveSong: function () {
+		setTimeout(() => {
+			$(".song.active").scrollIntoView({
+				behavior: "smooth",
+				block: "center",
+			});
+		}, 300);
+	},
+
+	// Load config
+	loadConfig: function () {
+		this.isRandom = this.config.isRandom;
+		this.isRepeat = this.config.isRepeat;
+	},
+
+	renderConfig: function () {
+		if (this.isRandom) randomBtn.classList.toggle("active");
+		if (this.isRepeat) repeatBtn.classList.toggle("active");
 	},
 
 	// Load the current song into UI
@@ -212,8 +274,10 @@ const app = {
 		heading.textContent = this.currentSong.name;
 		cdThumb.style.backgroundImage = `url(${this.currentSong.image})`;
 		audio.src = this.currentSong.path;
+		this.activeSong();
 	},
 
+	// Calculate next song
 	nextSong: function () {
 		this.currentIndex++;
 		if (this.currentIndex > this.songs.length - 1) {
@@ -222,6 +286,7 @@ const app = {
 		this.loadCurrentSong();
 	},
 
+	// Calculate previous song
 	previousSong: function () {
 		this.currentIndex--;
 		if (this.currentIndex < 0) {
@@ -230,6 +295,7 @@ const app = {
 		this.loadCurrentSong();
 	},
 
+	// Handle random algorithms
 	randomSong: function () {
 		let newIndexSong;
 		do {
@@ -239,7 +305,22 @@ const app = {
 		this.loadCurrentSong();
 	},
 
+	// Handle active song
+	activeSong: function () {
+		const currentSongBlock = $(`.song[data-id="${this.currentIndex}"]`);
+		if (currentSongBlock) {
+			$(".song.active").classList.remove("active");
+			currentSongBlock.classList.add("active");
+		}
+	},
+
 	start: function () {
+		// Load config
+		this.loadConfig();
+
+		// Render config
+		this.renderConfig();
+
 		// Declare properties for object
 		this.defineProperties();
 
