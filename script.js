@@ -1,13 +1,21 @@
 const $ = document.querySelector.bind(document);
 const $$ = document.querySelectorAll.bind(document);
 
+const cd = $(".cd");
 const heading = $("header h2");
 const cdThumb = $(".cd-thumb");
 const audio = $("#audio");
 const playBtn = $(".btn-toggle-play");
+const player = $(".player");
+const progress = $(".progress");
+const nextBtn = $(".btn-next");
+const previousBtn = $(".btn-prev");
+const randomBtn = $(".btn-random");
 
 const app = {
 	currentIndex: 0,
+	isPlay: false,
+	isRandom: false,
 	songs: [
 		{
 			name: "Dung lam trai tim anh dau",
@@ -71,7 +79,7 @@ const app = {
 		},
 	],
 
-	// render data to UI
+	// Render data to UI
 	render: function () {
 		htmls = this.songs.map((song) => {
 			return `
@@ -93,7 +101,7 @@ const app = {
 		$(".playlist").innerHTML = htmls.join("");
 	},
 
-	// define currentSong for app
+	// Define currentSong for app
 	defineProperties: function () {
 		Object.defineProperty(this, "currentSong", {
 			get: function () {
@@ -102,11 +110,26 @@ const app = {
 		});
 	},
 
-	// scroll top
 	handleEvents: function () {
-		const cd = $(".cd");
+		const _this = this;
 		const cdWidth = cd.offsetWidth;
-		document.onscroll = function () {
+
+		// Handle CD rotate
+		const cdThumbAnimation = cdThumb.animate(
+			[
+				{
+					transform: "rotate(360deg)",
+				},
+			],
+			{
+				duration: 10000,
+				iterations: Infinity,
+			}
+		);
+		cdThumbAnimation.pause();
+
+		// Handle scroll up/ down
+		document.onscroll = () => {
 			const scrollTop =
 				window.scrollY || document.documentElement.scrollTop;
 			const newWidth = cdWidth - scrollTop;
@@ -114,6 +137,74 @@ const app = {
 			cd.style.width = newWidth > 0 ? newWidth + "px" : 0;
 			cd.style.opacity = (newWidth / cdWidth) * 1;
 		};
+
+		// Handle play/ pause button
+		playBtn.onclick = () => {
+			if (_this.isPlay) {
+				audio.pause();
+			} else {
+				audio.play();
+			}
+		};
+
+		// Handle play property
+		audio.onplay = () => {
+			_this.isPlay = true;
+			player.classList.add("playing");
+			cdThumbAnimation.play();
+		};
+
+		// Handle pause property
+		audio.onpause = () => {
+			_this.isPlay = false;
+			player.classList.remove("playing");
+			cdThumbAnimation.pause();
+		};
+
+		// Handle progress bar
+		audio.ontimeupdate = () => {
+			if (audio.duration) {
+				const currentTime = (audio.currentTime / audio.duration) * 100;
+				progress.value = currentTime;
+			}
+		};
+
+		// Handle seek, using oninput instead of using onchange, avoid shaky
+		progress.oninput = (e) => {
+			const timeInput = (e.target.value * audio.duration) / 100;
+			audio.currentTime = timeInput;
+		};
+
+		// Handle next song button
+		nextBtn.onclick = () => {
+			if (_this.isRandom) {
+				_this.randomSong();
+			} else {
+				_this.nextSong();
+			}
+			audio.play();
+		};
+
+		// Handle previous song button
+		previousBtn.onclick = () => {
+			if (_this.isRandom) {
+				_this.randomSong();
+			} else {
+				_this.previousSong();
+			}
+			audio.play();
+		};
+
+		// Handle random song button
+		randomBtn.onclick = (e) => {
+			_this.isRandom = !_this.isRandom;
+			e.target.closest(".btn").classList.toggle("active");
+		};
+
+		// Handle when ended
+		audio.onended = () => {
+			nextBtn.onclick();
+		}
 	},
 
 	// Load the current song into UI
@@ -121,16 +212,41 @@ const app = {
 		heading.textContent = this.currentSong.name;
 		cdThumb.style.backgroundImage = `url(${this.currentSong.image})`;
 		audio.src = this.currentSong.path;
+	},
 
-		console.log(heading, cdThumb, audio);
+	nextSong: function () {
+		this.currentIndex++;
+		if (this.currentIndex > this.songs.length - 1) {
+			this.currentIndex = 0;
+		}
+		this.loadCurrentSong();
+	},
+
+	previousSong: function () {
+		this.currentIndex--;
+		if (this.currentIndex < 0) {
+			this.currentIndex = this.songs.length - 1;
+		}
+		this.loadCurrentSong();
+	},
+
+	randomSong: function () {
+		let newIndexSong;
+		do {
+			newIndexSong = Math.floor(Math.random() * this.songs.length);
+		} while (newIndexSong === this.currentIndex);
+		this.currentIndex = newIndexSong;
+		this.loadCurrentSong();
 	},
 
 	start: function () {
 		// Declare properties for object
 		this.defineProperties();
-		// Listen and handle events
+
+		// Set up listen and handle events
 		this.handleEvents();
 
+		// Load the first song
 		this.loadCurrentSong();
 
 		// Render playlist
